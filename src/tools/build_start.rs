@@ -37,6 +37,10 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
         return Ok(text_err("404: build.sh not found in project root."));
     }
 
+    // BIG SECURITY NOTE: we are intentionally allowing arbitrary code execution here, since the whole point of this tool is to run the user's build.sh.
+    // DO NOT add any features that would allow an attacker to write files into the project directory or otherwise modify the build.sh script,
+    // without proper authentication and authorization in place. If you need to add such features, add them in a way that does not run the risk
+    // of unauthorized code execution (e.g. by having a separate authenticated endpoint that can only write to a safe location, and having build.sh read from there).
     let child = tokio::process::Command::new(SHELL_BIN)
         .arg(&script)
         .current_dir(&project_dir)

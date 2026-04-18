@@ -39,7 +39,8 @@ async fn run_http(app_state: SharedState) {
         .with_state(app_state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-    let addr = format!("0.0.0.0:{port}");
+    // we use http - so bind only to localhost for security, since we have no auth and allow arbitrary code execution via build.sh
+    let addr = format!("127.0.0.1:{port}");
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
