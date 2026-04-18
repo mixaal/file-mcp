@@ -9,3 +9,6 @@ pub const GIT_LOG_MAX_N: u64 = 200;
 
 /// Maximum byte-length of a git ref accepted by git_diff.
 pub const GIT_REF_MAX_LEN: usize = 200;
+
+/// Shell used to execute build.sh (and run.sh in the future).
+pub const SHELL_BIN: &str = "/bin/bash";

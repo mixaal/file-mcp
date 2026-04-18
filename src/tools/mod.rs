@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
+pub mod build;
 pub mod create_project;
 pub mod git_diff;
 pub mod git_diff_staged;
@@ -230,6 +231,14 @@ pub fn list() -> Value {
                     "type": "object",
                     "properties": {}
                 }
+            },
+            {
+                "name": "build",
+                "description": "Execute build.sh in the active project root. Returns success output when the script exits 0; returns stdout and stderr when it exits non-zero so the caller can diagnose the failure. Returns 404-equivalent if no project is active or build.sh is missing.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         ]
     })
@@ -258,6 +267,7 @@ pub async fn call(state: Arc<Mutex<AppState>>, params: &Value) -> ToolResult {
         "tree" => tree::run(state, &args).await,
         "put" => put::run(state, &args).await,
         "get_project_info" => get_project_info::run(state).await,
+        "build" => build::run(state).await,
         "git_status" => git_status::run(state).await,
         "git_log" => git_log::run(state, &args).await,
         "git_diff" => git_diff::run(state, &args).await,
