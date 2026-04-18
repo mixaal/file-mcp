@@ -2,6 +2,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::MAX_GET_FILE_SZ;
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::{check_is_regular, safe_path};
@@ -64,6 +65,16 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         return Ok(text_ok(format!(
             "Directory listing for '{path_str}':\n{}",
             entries.join("\n")
+        )));
+    }
+
+    let size = tokio::fs::metadata(&target)
+        .await
+        .map_err(|e| (-32603i32, format!("Failed to stat file: {e}")))?
+        .len();
+    if size > MAX_GET_FILE_SZ {
+        return Ok(text_err(format!(
+            "413: file '{path_str}' is {size} bytes, exceeds max {MAX_GET_FILE_SZ}."
         )));
     }
 

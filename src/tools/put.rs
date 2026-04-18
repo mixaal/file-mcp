@@ -2,6 +2,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::MAX_PUT_FILE_SZ;
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::{
@@ -39,6 +40,13 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .get("content")
         .and_then(|v| v.as_str())
         .ok_or_else(|| (-32602i32, "Missing required argument: content".to_string()))?;
+
+    if content.len() > MAX_PUT_FILE_SZ {
+        return Ok(text_err(format!(
+            "413: content is {} bytes, exceeds max {MAX_PUT_FILE_SZ}.",
+            content.len()
+        )));
+    }
 
     let message_raw = args
         .get("message")

@@ -12,3 +12,9 @@ pub const GIT_REF_MAX_LEN: usize = 200;
 
 /// Shell used to execute build.sh (and run.sh in the future).
 pub const SHELL_BIN: &str = "/bin/bash";
+
+/// Maximum size (bytes) of a file returned by `get`. Larger files are rejected.
+pub const MAX_GET_FILE_SZ: u64 = 512 * 1024;
+
+/// Maximum size (bytes) of content accepted by `put`. Larger payloads are rejected.
+pub const MAX_PUT_FILE_SZ: usize = 512 * 1024;
