@@ -4,13 +4,15 @@ use tokio::sync::Mutex;
 
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
-use crate::util::{check_is_regular, path_depth, safe_path, validate_put_path};
+use crate::util::{
+    check_is_regular, excluded_dirs_for, is_excluded_path, path_depth, safe_path, validate_put_path,
+};
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
-    let (project_dir, max_depth) = {
+    let (project_dir, max_depth, language) = {
         let st = state.lock().await;
         match st.project_dir.clone() {
-            Some(d) => (d, st.max_depth),
+            Some(d) => (d, st.max_depth, st.language.clone().unwrap_or_default()),
             None => {
                 return Ok(text_err(
                     "404: no active project — call create_project or use_project first.",
@@ -19,10 +21,20 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         }
     };
 
+    let excluded = excluded_dirs_for(&language);
+
     let path_str = args
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| (-32602i32, "Missing required argument: path".to_string()))?;
+
+    // ── 400: excluded build-artifact directories ──────────────────────────────
+    if is_excluded_path(path_str, excluded) {
+        return Ok(text_err(format!(
+            "400: '{path_str}' is inside a build-artifact directory \
+             and cannot be created directly."
+        )));
+    }
 
     // Reuse the same per-component character rules as put (._-a-zA-Z0-9).
     // validate_put_path already rejects absolute paths, '..' and bad chars.

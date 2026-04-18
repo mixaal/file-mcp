@@ -5,15 +5,21 @@ use tokio::sync::Mutex;
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::{
-    check_is_regular, count_files_sync, path_depth, run_git, safe_path, sanitize_message,
-    validate_put_path,
+    check_is_regular, count_files_sync, excluded_dirs_for, is_excluded_path, path_depth, run_git,
+    safe_path, sanitize_message, validate_put_path,
 };
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
-    let (project_dir, git_cmd, max_files, max_depth) = {
+    let (project_dir, git_cmd, max_files, max_depth, language) = {
         let st = state.lock().await;
         match st.project_dir.clone() {
-            Some(d) => (d, st.git_cmd.clone(), st.max_files, st.max_depth),
+            Some(d) => (
+                d,
+                st.git_cmd.clone(),
+                st.max_files,
+                st.max_depth,
+                st.language.clone().unwrap_or_default(),
+            ),
             None => {
                 return Ok(text_err(
                     "404: no active project — call create_project or use_project first.",
@@ -21,6 +27,8 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
             }
         }
     };
+
+    let excluded = excluded_dirs_for(&language);
 
     let path_str = args
         .get("path")
@@ -36,6 +44,14 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .get("message")
         .and_then(|v| v.as_str())
         .ok_or_else(|| (-32602i32, "Missing required argument: message".to_string()))?;
+
+    // ── 400: excluded build-artifact directories ──────────────────────────────
+    if is_excluded_path(path_str, excluded) {
+        return Ok(text_err(format!(
+            "400: '{path_str}' is inside a build-artifact directory \
+             and cannot be written directly."
+        )));
+    }
 
     // ── 400: filename character validation ────────────────────────────────────
     if let Err(reason) = validate_put_path(path_str) {
@@ -101,7 +117,7 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     // ── 400: file count limit (only for new files) ────────────────────────────
     if !target.exists() {
         let dir = project_dir.clone();
-        let current = tokio::task::spawn_blocking(move || count_files_sync(&dir))
+        let current = tokio::task::spawn_blocking(move || count_files_sync(&dir, excluded))
             .await
             .unwrap_or(0);
         if current >= max_files {

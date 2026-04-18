@@ -119,12 +119,58 @@ pub fn path_depth(path: &str) -> usize {
         .count()
 }
 
-/// Recursively count regular files under `dir` (synchronous — call via spawn_blocking).
-pub fn count_files_sync(dir: &Path) -> usize {
+/// Returns the top-level build-artifact directories for a given language.
+/// These directories must not be written to via put/mkdir, and are not
+/// counted toward the project file limit.
+pub fn excluded_dirs_for(language: &str) -> &'static [&'static str] {
+    match language.to_lowercase().as_str() {
+        "rust" => &["target"],
+        "java" => &["target", "build", ".gradle"],
+        "python" => &[".venv", "venv", "__pycache__", "dist", "build"],
+        "go" => &["vendor"],
+        "javascript" | "js" | "node" | "typescript" | "ts" => &["node_modules", "dist", "build"],
+        "c" | "c++" | "cpp" => &["build"],
+        "godot" | "godot3d" | "godot-3d" | "godot2d" | "godot-2d" => &[".godot"],
+        _ => &[],
+    }
+}
+
+/// Returns true when the first component of `path` matches an excluded directory.
+/// Only the top-level component is checked — `src/target/foo` is not excluded,
+/// but `target/foo` is.
+pub fn is_excluded_path(path: &str, excluded: &[&str]) -> bool {
+    Path::new(path)
+        .components()
+        .find_map(|c| {
+            if let Component::Normal(n) = c {
+                Some(n.to_string_lossy().into_owned())
+            } else {
+                None
+            }
+        })
+        .map(|first| excluded.iter().any(|e| *e == first.as_str()))
+        .unwrap_or(false)
+}
+
+/// Recursively count regular files under `dir`, skipping any top-level
+/// subdirectory whose name appears in `excluded` (synchronous — call via spawn_blocking).
+pub fn count_files_sync(dir: &Path, excluded: &[&str]) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
     entries.filter_map(|e| e.ok()).fold(0, |acc, entry| {
         let p = entry.path();
-        if p.is_file() { acc + 1 } else if p.is_dir() { acc + count_files_sync(&p) } else { acc }
+        if p.is_file() {
+            acc + 1
+        } else if p.is_dir() {
+            let skip = p
+                .file_name()
+                .map(|n| excluded.iter().any(|e| *e == n.to_string_lossy().as_ref()))
+                .unwrap_or(false);
+            // Excluded top-level dirs are not counted, but we still recurse into
+            // non-excluded subdirs using an empty excluded list (only top-level matters).
+            if skip { acc } else { acc + count_files_sync(&p, &[]) }
+        } else {
+            acc
+        }
     })
 }
 
