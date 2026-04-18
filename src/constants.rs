@@ -16,6 +16,13 @@ pub const SHELL_BIN: &str = "/bin/bash";
 /// Absolute path to the git binary used for all git sub-commands.
 pub const GIT_BIN: &str = "/usr/bin/git";
 
+/// Absolute path to the cargo binary used for Rust project scaffolding.
+/// Resolved from $HOME at build time to pick up the rustup default location.
+pub const CARGO_BIN: &str = concat!(env!("HOME"), "/.cargo/bin/cargo");
+
+/// Absolute path to the go binary used for Go project scaffolding.
+pub const GO_BIN: &str = "/snap/bin/go";
+
 /// Maximum size (bytes) of a file returned by `get`. Larger files are rejected.
 pub const MAX_GET_FILE_SZ: u64 = 512 * 1024;
 

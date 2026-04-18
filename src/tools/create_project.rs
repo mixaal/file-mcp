@@ -6,7 +6,7 @@ use tokio::fs;
 use tokio::sync::Mutex;
 
 use super::godot;
-use crate::constants::GIT_BIN;
+use crate::constants::{CARGO_BIN, GIT_BIN, GO_BIN};
 use crate::state::{AppState, ProjectSize};
 use crate::tools::{ToolResult, text_err, text_ok};
 use crate::util::{run_git, validate_name};
@@ -119,7 +119,7 @@ async fn scaffold_project(
     match language.to_lowercase().as_str() {
         "rust" => {
             // --vcs none: we manage git ourselves for consistency
-            let status = tokio::process::Command::new("cargo")
+            let status = tokio::process::Command::new(CARGO_BIN)
                 .args(["new", "--vcs", "none", name])
                 .current_dir(parent)
                 .status()
@@ -133,7 +133,7 @@ async fn scaffold_project(
             fs::create_dir_all(project_dir)
                 .await
                 .map_err(|e| e.to_string())?;
-            let ok = tokio::process::Command::new("go")
+            let ok = tokio::process::Command::new(GO_BIN)
                 .args(["mod", "init", name])
                 .current_dir(project_dir)
                 .status()
