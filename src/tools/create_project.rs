@@ -82,7 +82,28 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
 }
 
 // ── scaffolding ───────────────────────────────────────────────────────────────
-
+// SUCRITY NOTE: Commands usage table - USER MUST review their PATH variables to ensure these bindings are safe
+//   ┌──────────┬───────────────────────────────────┬─────────────────────────────┐
+//   │ Language │           build.sh uses           │         run.sh uses         │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ Rust     │ cargo                             │ cargo                       │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ Go       │ go                                │ go                          │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ Java     │ mvn                               │ mvn                         │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ Python   │ python3, .venv/bin/pip (relative) │ .venv/bin/python / python3  │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ C        │ make → then Makefile uses gcc, rm │ the built binary (relative) │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ C++      │ cmake, optionally ninja           │ built binary (relative)     │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ JS/Node  │ npm                               │ npm                         │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ TS       │ npm, npx (tsc via npx)            │ node                        │
+//   ├──────────┼───────────────────────────────────┼─────────────────────────────┤
+//   │ Godot    │ $GODOT env or godot               │ same                        │
+//   └──────────┴───────────────────────────────────┴─────────────────────────────┘
 async fn scaffold_project(
     project_dir: &PathBuf,
     name: &str,
@@ -296,7 +317,12 @@ async fn scaffold_project(
 
     // Initial commit
     let _ = run_git(Path::new(GIT_BIN), project_dir, &["add", "-A"]).await;
-    let _ = run_git(Path::new(GIT_BIN), project_dir, &["commit", "-m", "initial-commit"]).await;
+    let _ = run_git(
+        Path::new(GIT_BIN),
+        project_dir,
+        &["commit", "-m", "initial-commit"],
+    )
+    .await;
 
     Ok(())
 }
