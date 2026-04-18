@@ -5,6 +5,10 @@ use tokio::sync::Mutex;
 use crate::state::AppState;
 
 pub mod create_project;
+pub mod git_diff;
+pub mod git_diff_staged;
+pub mod git_log;
+pub mod git_status;
 pub mod godot;
 pub mod get;
 pub mod get_project_info;
@@ -183,6 +187,49 @@ pub fn list() -> Value {
                     "type": "object",
                     "properties": {}
                 }
+            },
+            {
+                "name": "git_status",
+                "description": "Show the working-tree status of the active project (equivalent to `git status`). Returns 404-equivalent if no project is active.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "git_log",
+                "description": "Show the last N commits of the active project as an oneline graph (equivalent to `git log --oneline --decorate --graph -n N`). Returns 404-equivalent if no project is active.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "n": {
+                            "type": "integer",
+                            "description": "Number of commits to show (default 10, max 200)",
+                            "minimum": 1
+                        }
+                    }
+                }
+            },
+            {
+                "name": "git_diff",
+                "description": "Show the diff of the working tree against a git ref (equivalent to `git diff <ref>`). Defaults to HEAD when no ref is supplied. Returns 404-equivalent if no project is active.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "ref": {
+                            "type": "string",
+                            "description": "Git ref to diff against (e.g. 'HEAD', 'main', a commit SHA). Defaults to HEAD."
+                        }
+                    }
+                }
+            },
+            {
+                "name": "git_diff_staged",
+                "description": "Show the diff of staged changes that would go into the next commit (equivalent to `git diff --staged`). Returns 404-equivalent if no project is active.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         ]
     })
@@ -211,6 +258,10 @@ pub async fn call(state: Arc<Mutex<AppState>>, params: &Value) -> ToolResult {
         "tree" => tree::run(state, &args).await,
         "put" => put::run(state, &args).await,
         "get_project_info" => get_project_info::run(state).await,
+        "git_status" => git_status::run(state).await,
+        "git_log" => git_log::run(state, &args).await,
+        "git_diff" => git_diff::run(state, &args).await,
+        "git_diff_staged" => git_diff_staged::run(state).await,
         _ => Err((-32601, format!("Unknown tool: {name}"))),
     }
 }
