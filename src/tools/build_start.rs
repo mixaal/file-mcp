@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::constants::SHELL_BIN;
 use crate::state::{AppState, BuildJob};
-use crate::tools::{text_err, text_ok, ToolResult};
+use crate::tools::{ToolResult, text_err, text_ok};
 
 pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
     let (project_dir, script) = {
@@ -15,11 +15,14 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
             None => {
                 return Ok(text_err(
                     "404: no active project — call create_project or use_project first.",
-                ))
+                ));
             }
         };
 
-        let already_running = st.jobs.values().any(|j| matches!(j, BuildJob::Running { .. }));
+        let already_running = st
+            .jobs
+            .values()
+            .any(|j| matches!(j, BuildJob::Running { .. }));
         if already_running {
             return Ok(text_err(
                 "409: a build is already running — poll with build_status.",
@@ -43,6 +46,7 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
         .spawn()
         .map_err(|e| (-32603i32, format!("Failed to spawn build.sh: {e}")))?;
 
+    // KILLING NOTE: Careful: if the pid is 0 in kill must be guard, not to kill -SIGTERM 0 which means "kill all processes in the current process group"
     let pid = child.id().unwrap_or(0);
     let job_id = Uuid::new_v4().to_string();
 

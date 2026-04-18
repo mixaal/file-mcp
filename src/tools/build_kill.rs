@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::state::{AppState, BuildJob};
-use crate::tools::{text_err, text_ok, ToolResult};
+use crate::tools::{ToolResult, text_err, text_ok};
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let job_id = args
@@ -17,11 +17,12 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let pid = match st.jobs.get(&job_id) {
         None => return Ok(text_err(format!("404: unknown job_id '{job_id}'."))),
         Some(BuildJob::Done { .. }) => {
-            return Ok(text_ok("Build has already finished — nothing to kill."))
+            return Ok(text_ok("Build has already finished — nothing to kill."));
         }
         Some(BuildJob::Running { pid }) => *pid,
     };
 
+    // See KILLING NOTE in build_start.rs about the pid 0 case. We guard against it here, and return an error instead of trying to kill.
     if pid == 0 {
         return Ok(text_err("Cannot kill: process PID is unavailable."));
     }
