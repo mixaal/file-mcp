@@ -2,7 +2,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::constants::MAX_PUT_FILE_SZ;
+use std::path::Path;
+
+use crate::constants::{GIT_BIN, MAX_PUT_FILE_SZ};
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::{
@@ -11,12 +13,11 @@ use crate::util::{
 };
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
-    let (project_dir, git_cmd, max_files, max_depth, language) = {
+    let (project_dir, max_files, max_depth, language) = {
         let st = state.lock().await;
         match st.project_dir.clone() {
             Some(d) => (
                 d,
-                st.git_cmd.clone(),
                 st.max_files,
                 st.max_depth,
                 st.language.clone().unwrap_or_default(),
@@ -147,11 +148,11 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .to_string_lossy()
         .into_owned();
 
-    run_git(&git_cmd, &project_dir, &["add", &rel])
+    run_git(Path::new(GIT_BIN), &project_dir, &["add", &rel])
         .await
         .map_err(|e| (-32603i32, format!("git add failed: {e}")))?;
 
-    match run_git(&git_cmd, &project_dir, &["commit", "-a", "-m", &message]).await {
+    match run_git(Path::new(GIT_BIN), &project_dir, &["commit", "-a", "-m", &message]).await {
         Ok(out) => Ok(text_ok(format!(
             "File '{path_str}' written and committed (message='{message}').\n{out}"
         ))),

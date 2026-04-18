@@ -13,6 +13,9 @@ pub const GIT_REF_MAX_LEN: usize = 200;
 /// Shell used to execute build.sh (and run.sh in the future).
 pub const SHELL_BIN: &str = "/bin/bash";
 
+/// Absolute path to the git binary used for all git sub-commands.
+pub const GIT_BIN: &str = "/usr/bin/git";
+
 /// Maximum size (bytes) of a file returned by `get`. Larger files are rejected.
 pub const MAX_GET_FILE_SZ: u64 = 512 * 1024;
 

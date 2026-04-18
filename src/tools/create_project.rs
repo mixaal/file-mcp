@@ -1,11 +1,12 @@
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::Mutex;
 
 use super::godot;
+use crate::constants::GIT_BIN;
 use crate::state::{AppState, ProjectSize};
 use crate::tools::{ToolResult, text_err, text_ok};
 use crate::util::{run_git, validate_name};
@@ -37,9 +38,9 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let max_files = size.max_files();
     let max_depth = size.max_depth(&language);
 
-    let (base_dir, git_cmd) = {
+    let base_dir = {
         let st = state.lock().await;
-        (st.base_dir.clone(), st.git_cmd.clone())
+        st.base_dir.clone()
     };
 
     let project_dir = base_dir.join(&name);
@@ -57,7 +58,6 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         &size_str,
         max_files,
         max_depth,
-        &git_cmd,
     )
     .await
     {
@@ -90,7 +90,6 @@ async fn scaffold_project(
     size_str: &str,
     max_files: usize,
     max_depth: usize,
-    git_cmd: &PathBuf,
 ) -> Result<(), String> {
     let parent = project_dir
         .parent()
@@ -249,7 +248,7 @@ async fn scaffold_project(
     write_scripts(project_dir, language, name).await?;
 
     // ── git init ──────────────────────────────────────────────────────────────
-    let ok = tokio::process::Command::new(git_cmd)
+    let ok = tokio::process::Command::new(GIT_BIN)
         .args(["init"])
         .current_dir(project_dir)
         .status()
@@ -265,7 +264,7 @@ async fn scaffold_project(
     //     ("user.email", "mcp@file-mcp.local"),
     //     ("user.name", "MCP Server"),
     // ] {
-    //     let _ = run_git(git_cmd, project_dir, &["config", k, v]).await;
+    //     let _ = run_git(Path::new(GIT_BIN), project_dir, &["config", k, v]).await;
     // }
 
     // Language-appropriate .gitignore
@@ -296,8 +295,8 @@ async fn scaffold_project(
     .map_err(|e| e.to_string())?;
 
     // Initial commit
-    let _ = run_git(git_cmd, project_dir, &["add", "-A"]).await;
-    let _ = run_git(git_cmd, project_dir, &["commit", "-m", "initial-commit"]).await;
+    let _ = run_git(Path::new(GIT_BIN), project_dir, &["add", "-A"]).await;
+    let _ = run_git(Path::new(GIT_BIN), project_dir, &["commit", "-m", "initial-commit"]).await;
 
     Ok(())
 }

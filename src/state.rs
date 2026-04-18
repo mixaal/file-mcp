@@ -69,8 +69,6 @@ pub struct AppState {
     pub project_name: Option<String>,
     /// Base directory for all projects: $PRJ_DIR if set, otherwise CWD at startup.
     pub base_dir: PathBuf,
-    /// Absolute path to git binary (from $GIT_CMD or default /usr/bin/git).
-    pub git_cmd: PathBuf,
     /// Background build jobs keyed by job_id.
     pub jobs: HashMap<String, BuildJob>,
 }
@@ -81,19 +79,6 @@ impl AppState {
             .map(PathBuf::from)
             .unwrap_or_else(|_| std::env::current_dir().expect("Cannot determine CWD"));
 
-        let git_cmd = std::env::var("GIT_CMD")
-            .ok()
-            .and_then(|s| {
-                let p = PathBuf::from(&s);
-                if p.is_absolute() {
-                    Some(p)
-                } else {
-                    eprintln!("Warning: GIT_CMD '{}' is not an absolute path — using default", s);
-                    None
-                }
-            })
-            .unwrap_or_else(|| PathBuf::from("/usr/bin/git"));
-
         AppState {
             project_dir: None,
             language: None,
@@ -102,7 +87,6 @@ impl AppState {
             size: ProjectSize::Medium,
             project_name: None,
             base_dir,
-            git_cmd,
             jobs: HashMap::new(),
         }
     }
