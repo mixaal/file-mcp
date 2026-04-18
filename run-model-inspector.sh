@@ -11,7 +11,7 @@ cargo build --release --manifest-path "${SCRIPT_DIR}/Cargo.toml"
 
 # ── start server ──────────────────────────────────────────────────────────────
 echo "==> Starting file-mcp on port ${PORT}..."
-"${SCRIPT_DIR}/target/release/file-mcp" &
+"${SCRIPT_DIR}/target/release/file-mcp" --http &
 SERVER_PID=$!
 trap 'echo; echo "==> Stopping file-mcp (PID ${SERVER_PID})..."; kill "${SERVER_PID}" 2>/dev/null || true' EXIT INT TERM
 

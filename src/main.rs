@@ -26,10 +26,12 @@ type SharedState = Arc<Mutex<AppState>>;
 async fn main() {
     let app_state: SharedState = Arc::new(Mutex::new(AppState::new()));
 
-    if std::env::args().any(|a| a == "--stdio") {
-        run_stdio(app_state).await;
-    } else {
+    // Default to stdio — safest transport, no network exposure. Pass --http to
+    // opt into the HTTP listener (which binds to 127.0.0.1 only).
+    if std::env::args().any(|a| a == "--http") {
         run_http(app_state).await;
+    } else {
+        run_stdio(app_state).await;
     }
 }
 
