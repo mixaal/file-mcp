@@ -41,3 +41,8 @@ pub const MAX_DEPTH_HARD_CAP: usize = 10;
 /// Protects against pathological cases (huge node_modules/, etc.) regardless
 /// of depth/breadth. Output beyond this cap is replaced with a sentinel line.
 pub const MAX_TREE_LINES: usize = 10_000;
+
+/// Maximum size (bytes) of stdout/stderr returned by `run_git`. Larger output
+/// is truncated with a sentinel appended. Only bounds the response handed back
+/// to the client — peak memory during git execution is not capped here.
+pub const MAX_GIT_OUTPUT_BYTES: usize = 1024 * 1024;

@@ -187,6 +187,13 @@ pub fn sanitize_message(msg: &str) -> String {
 }
 
 /// Run a git sub-command in `dir`.  Returns stdout on success, stderr on failure.
+///
+/// FIXME: `Command::output()` uses `Stdio::piped()` internally and buffers the
+/// full stdout/stderr into memory before returning. The truncation below only
+/// bounds the response we hand back — peak memory during git execution is still
+/// proportional to the raw output size. To cap peak memory we'd need to spawn
+/// with explicit piped stdio and stream-read with an early stop / kill once the
+/// cap is reached. Deferred as too heavy for the current threat model.
 pub async fn run_git(
     git_cmd: &Path,
     dir: &Path,
@@ -200,8 +207,26 @@ pub async fn run_git(
         .map_err(|e| format!("failed to spawn git: {e}"))?;
 
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        Ok(truncate_output(&output.stdout))
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+        Err(truncate_output(&output.stderr))
     }
+}
+
+/// Lossy-convert raw bytes to String and cap at `MAX_GIT_OUTPUT_BYTES`, appending
+/// a sentinel if truncation happened. Cuts at a UTF-8 char boundary.
+fn truncate_output(bytes: &[u8]) -> String {
+    let mut s = String::from_utf8_lossy(bytes).into_owned();
+    if s.len() > crate::constants::MAX_GIT_OUTPUT_BYTES {
+        let mut cut = crate::constants::MAX_GIT_OUTPUT_BYTES;
+        while cut > 0 && !s.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        s.truncate(cut);
+        s.push_str(&format!(
+            "\n... (truncated at {} bytes)",
+            crate::constants::MAX_GIT_OUTPUT_BYTES
+        ));
+    }
+    s
 }
