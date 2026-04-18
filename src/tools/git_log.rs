@@ -2,6 +2,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::{GIT_LOG_DEFAULT_N, GIT_LOG_MAX_N};
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::run_git;
@@ -22,8 +23,8 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let n: usize = args
         .get("n")
         .and_then(|v| v.as_u64())
-        .unwrap_or(10)
-        .min(200) as usize;
+        .unwrap_or(GIT_LOG_DEFAULT_N)
+        .min(GIT_LOG_MAX_N) as usize;
 
     let n_str = n.to_string();
     match run_git(

@@ -12,6 +12,7 @@ use tokio::{
     sync::Mutex,
 };
 
+mod constants;
 mod mcp;
 mod state;
 mod tools;

@@ -2,6 +2,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::GIT_REF_MAX_LEN;
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::run_git;
@@ -27,7 +28,7 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
 
     // Allowlist: only characters valid in git refs.
     let valid = !git_ref.is_empty()
-        && git_ref.len() <= 200
+        && git_ref.len() <= GIT_REF_MAX_LEN
         && git_ref
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | '~' | '^'));

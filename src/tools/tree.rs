@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::PAGE_SIZE;
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::safe_path;
-
-const PAGE_SIZE: usize = 100;
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let (project_dir, max_depth) = {
