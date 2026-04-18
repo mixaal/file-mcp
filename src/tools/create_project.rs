@@ -5,10 +5,10 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::Mutex;
 
-use crate::state::{AppState, ProjectSize};
-use crate::tools::{text_err, text_ok, ToolResult};
-use crate::util::{run_git, validate_name};
 use super::godot;
+use crate::state::{AppState, ProjectSize};
+use crate::tools::{ToolResult, text_err, text_ok};
+use crate::util::{run_git, validate_name};
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let name = args
@@ -50,8 +50,16 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         )));
     }
 
-    if let Err(e) =
-        scaffold_project(&project_dir, &name, &language, &size_str, max_files, max_depth, &git_cmd).await
+    if let Err(e) = scaffold_project(
+        &project_dir,
+        &name,
+        &language,
+        &size_str,
+        max_files,
+        max_depth,
+        &git_cmd,
+    )
+    .await
     {
         // Clean up on failure
         let _ = fs::remove_dir_all(&project_dir).await;
@@ -102,7 +110,9 @@ async fn scaffold_project(
             }
         }
         "go" => {
-            fs::create_dir_all(project_dir).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir)
+                .await
+                .map_err(|e| e.to_string())?;
             let ok = tokio::process::Command::new("go")
                 .args(["mod", "init", name])
                 .current_dir(project_dir)
@@ -119,9 +129,7 @@ async fn scaffold_project(
         }
         "java" => {
             let pkg_id = java_pkg_id(name);
-            let src = project_dir
-                .join("src/main/java/com/example")
-                .join(&pkg_id);
+            let src = project_dir.join("src/main/java/com/example").join(&pkg_id);
             fs::create_dir_all(&src).await.map_err(|e| e.to_string())?;
             fs::create_dir_all(project_dir.join("src/main/resources"))
                 .await
@@ -154,16 +162,26 @@ async fn scaffold_project(
                 .map_err(|e| e.to_string())?;
         }
         "c" => {
-            fs::create_dir_all(project_dir.join("src")).await.map_err(|e| e.to_string())?;
-            fs::create_dir_all(project_dir.join("include")).await.map_err(|e| e.to_string())?;
-            fs::write(project_dir.join("src/main.c"), C_MAIN).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("src"))
+                .await
+                .map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("include"))
+                .await
+                .map_err(|e| e.to_string())?;
+            fs::write(project_dir.join("src/main.c"), C_MAIN)
+                .await
+                .map_err(|e| e.to_string())?;
             fs::write(project_dir.join("Makefile"), c_makefile(name))
                 .await
                 .map_err(|e| e.to_string())?;
         }
         "c++" | "cpp" => {
-            fs::create_dir_all(project_dir.join("src")).await.map_err(|e| e.to_string())?;
-            fs::create_dir_all(project_dir.join("include")).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("src"))
+                .await
+                .map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("include"))
+                .await
+                .map_err(|e| e.to_string())?;
             fs::write(project_dir.join("src/main.cpp"), CPP_MAIN)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -172,16 +190,23 @@ async fn scaffold_project(
                 .map_err(|e| e.to_string())?;
         }
         "javascript" | "js" | "node" => {
-            fs::create_dir_all(project_dir.join("src")).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("src"))
+                .await
+                .map_err(|e| e.to_string())?;
             fs::write(project_dir.join("src/index.js"), JS_MAIN)
                 .await
                 .map_err(|e| e.to_string())?;
-            fs::write(project_dir.join("package.json"), npm_package_json(name, "src/index.js"))
-                .await
-                .map_err(|e| e.to_string())?;
+            fs::write(
+                project_dir.join("package.json"),
+                npm_package_json(name, "src/index.js"),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
         }
         "typescript" | "ts" => {
-            fs::create_dir_all(project_dir.join("src")).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir.join("src"))
+                .await
+                .map_err(|e| e.to_string())?;
             fs::write(project_dir.join("src/index.ts"), TS_MAIN)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -196,15 +221,21 @@ async fn scaffold_project(
                 .map_err(|e| e.to_string())?;
         }
         "godot" | "godot3d" | "godot-3d" => {
-            fs::create_dir_all(project_dir).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir)
+                .await
+                .map_err(|e| e.to_string())?;
             godot::scaffold_3d(project_dir, name).await?;
         }
         "godot2d" | "godot-2d" => {
-            fs::create_dir_all(project_dir).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir)
+                .await
+                .map_err(|e| e.to_string())?;
             godot::scaffold_2d(project_dir, name).await?;
         }
         _ => {
-            fs::create_dir_all(project_dir).await.map_err(|e| e.to_string())?;
+            fs::create_dir_all(project_dir)
+                .await
+                .map_err(|e| e.to_string())?;
             fs::write(
                 project_dir.join("README.md"),
                 format!("# {name}\n\nLanguage: {language}\n"),
@@ -230,12 +261,12 @@ async fn scaffold_project(
     }
 
     // Configure a local identity so commits always work
-    for (k, v) in [
-        ("user.email", "mcp@file-mcp.local"),
-        ("user.name", "MCP Server"),
-    ] {
-        let _ = run_git(git_cmd, project_dir, &["config", k, v]).await;
-    }
+    // for (k, v) in [
+    //     ("user.email", "mcp@file-mcp.local"),
+    //     ("user.name", "MCP Server"),
+    // ] {
+    //     let _ = run_git(git_cmd, project_dir, &["config", k, v]).await;
+    // }
 
     // Language-appropriate .gitignore
     let gi = gitignore_for(language);
@@ -247,7 +278,9 @@ async fn scaffold_project(
 
     // .meta/project.json
     let meta_dir = project_dir.join(".meta");
-    fs::create_dir_all(&meta_dir).await.map_err(|e| e.to_string())?;
+    fs::create_dir_all(&meta_dir)
+        .await
+        .map_err(|e| e.to_string())?;
     let meta = serde_json::json!({
         "name": name,
         "language": language.to_lowercase(),
@@ -362,12 +395,16 @@ async fn write_scripts(dir: &PathBuf, language: &str, name: &str) -> Result<(), 
     let (build, run) = scripts_for(language, name);
     for (filename, content) in [("build.sh", build), ("run.sh", run)] {
         let path = dir.join(filename);
-        fs::write(&path, content).await.map_err(|e| format!("{filename}: {e}"))?;
+        fs::write(&path, content)
+            .await
+            .map_err(|e| format!("{filename}: {e}"))?;
         // Make executable on Unix.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&path).map_err(|e| e.to_string())?.permissions();
+            let mut perms = std::fs::metadata(&path)
+                .map_err(|e| e.to_string())?
+                .permissions();
             perms.set_mode(0o755);
             std::fs::set_permissions(&path, perms).map_err(|e| e.to_string())?;
         }
