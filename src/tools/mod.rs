@@ -158,7 +158,7 @@ pub fn list() -> Value {
             },
             {
                 "name": "tree",
-                "description": "Show the directory tree of the active project. Returns up to 100 lines per page; use 'offset' to paginate.",
+                "description": "Show the directory tree of the active project. Returns up to 100 lines per page; use 'offset' to paginate. Depth is clamped to a hard cap; build-artifact directories (target/, node_modules/, .venv/, ...) are skipped by default.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -168,7 +168,7 @@ pub fn list() -> Value {
                         },
                         "depth": {
                             "type": "integer",
-                            "description": "Maximum traversal depth (defaults to the project's max_depth)",
+                            "description": "Maximum traversal depth (defaults to the project's max_depth; clamped to a hard cap)",
                             "minimum": 0
                         },
                         "offset": {
@@ -179,6 +179,10 @@ pub fn list() -> Value {
                         "show_git": {
                             "type": "boolean",
                             "description": "Include the .git directory in the tree (default false)"
+                        },
+                        "show_excluded": {
+                            "type": "boolean",
+                            "description": "Include build-artifact directories like target/, node_modules/, .venv/ (default false)"
                         }
                     }
                 }

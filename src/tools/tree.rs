@@ -3,16 +3,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::constants::PAGE_SIZE;
+use crate::constants::{MAX_DEPTH_HARD_CAP, MAX_TREE_LINES, PAGE_SIZE};
 use crate::state::AppState;
 use crate::tools::{text_err, text_ok, ToolResult};
-use crate::util::safe_path;
+use crate::util::{excluded_dirs_for, safe_path};
 
 pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
-    let (project_dir, max_depth) = {
+    let (project_dir, max_depth, language) = {
         let st = state.lock().await;
         match st.project_dir.clone() {
-            Some(d) => (d, st.max_depth),
+            Some(d) => (d, st.max_depth, st.language.clone().unwrap_or_default()),
             None => {
                 return Ok(text_err(
                     "404: no active project — call create_project or use_project first.",
@@ -26,11 +26,14 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .and_then(|v| v.as_str())
         .unwrap_or(".");
 
+    // Clamp the user-supplied depth to a hard cap so a caller can't force an
+    // unbounded recursive walk by passing `depth: 999`.
     let depth_limit = args
         .get("depth")
         .and_then(|v| v.as_u64())
         .map(|d| d as usize)
-        .unwrap_or(max_depth);
+        .unwrap_or(max_depth)
+        .min(MAX_DEPTH_HARD_CAP);
 
     let offset = args
         .get("offset")
@@ -41,6 +44,14 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .get("show_git")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+
+    // By default we skip build-artifact dirs (target/, node_modules/, .venv/, ...)
+    // the same way we skip .git — they're huge and the user usually doesn't want them.
+    let show_excluded = args
+        .get("show_excluded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let excluded: &[&str] = if show_excluded { &[] } else { excluded_dirs_for(&language) };
 
     let root = if path_str == "." || path_str.is_empty() {
         project_dir.clone()
@@ -64,9 +75,22 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
 
     // Build the full tree synchronously (fs traversal is fast enough).
     let root_clone = root.clone();
+    let excluded_owned: Vec<String> = excluded.iter().map(|s| s.to_string()).collect();
     let mut lines: Vec<String> = tokio::task::spawn_blocking(move || {
         let mut out = Vec::new();
-        collect(&root_clone, "", 0, depth_limit, show_git, &mut out);
+        let excluded_refs: Vec<&str> = excluded_owned.iter().map(|s| s.as_str()).collect();
+        collect(
+            &root_clone,
+            "",
+            0,
+            depth_limit,
+            show_git,
+            &excluded_refs,
+            &mut out,
+        );
+        if out.len() >= MAX_TREE_LINES {
+            out.push(format!("... (truncated at {MAX_TREE_LINES} lines)"));
+        }
         out
     })
     .await
@@ -87,7 +111,20 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     Ok(text_ok(format!("{header}\n{}", page.join("\n"))))
 }
 
-fn collect(dir: &Path, prefix: &str, depth: usize, max_depth: usize, show_git: bool, out: &mut Vec<String>) {
+fn collect(
+    dir: &Path,
+    prefix: &str,
+    depth: usize,
+    max_depth: usize,
+    show_git: bool,
+    excluded: &[&str],
+    out: &mut Vec<String>,
+) {
+    // Bail early if we've already hit the line cap — caller adds the sentinel once.
+    if out.len() >= MAX_TREE_LINES {
+        return;
+    }
+
     let Ok(rd) = std::fs::read_dir(dir) else { return };
 
     // Collect only regular files and plain directories; skip symlinks and special files.
@@ -95,8 +132,15 @@ fn collect(dir: &Path, prefix: &str, depth: usize, max_depth: usize, show_git: b
         .filter_map(|e| e.ok())
         .filter_map(|e| {
             let p = e.path();
-            if !show_git && p.file_name().map(|n| n == ".git").unwrap_or(false) {
-                return None;
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned());
+            if let Some(ref n) = name {
+                if !show_git && n == ".git" {
+                    return None;
+                }
+                // Skip language-specific build-artifact dirs by name, at any depth.
+                if excluded.iter().any(|x| *x == n.as_str()) {
+                    return None;
+                }
             }
             let Ok(meta) = p.symlink_metadata() else { return None };
             let ft = meta.file_type();
@@ -110,6 +154,9 @@ fn collect(dir: &Path, prefix: &str, depth: usize, max_depth: usize, show_git: b
 
     let count = entries.len();
     for (i, path) in entries.iter().enumerate() {
+        if out.len() >= MAX_TREE_LINES {
+            return;
+        }
         let is_last = i == count - 1;
         let connector = if is_last { "└── " } else { "├── " };
         let name = path
@@ -127,7 +174,7 @@ fn collect(dir: &Path, prefix: &str, depth: usize, max_depth: usize, show_git: b
 
         if is_dir && depth < max_depth {
             let child_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
-            collect(path, &child_prefix, depth + 1, max_depth, show_git, out);
+            collect(path, &child_prefix, depth + 1, max_depth, show_git, excluded, out);
         }
     }
 }

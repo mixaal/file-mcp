@@ -36,3 +36,8 @@ pub const MAX_FILES_HARD_CAP: usize = 5000;
 /// Hard ceiling on `max_depth` loaded from `.meta/project.json`. Comfortably above
 /// the Large / Java preset (7).
 pub const MAX_DEPTH_HARD_CAP: usize = 10;
+
+/// Hard ceiling on total lines collected by a single `tree` traversal.
+/// Protects against pathological cases (huge node_modules/, etc.) regardless
+/// of depth/breadth. Output beyond this cap is replaced with a sentinel line.
+pub const MAX_TREE_LINES: usize = 10_000;
