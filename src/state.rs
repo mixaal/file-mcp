@@ -54,7 +54,7 @@ impl ProjectSize {
 /// Result of a background build job.
 #[derive(Debug)]
 pub enum BuildJob {
-    Running,
+    Running { pid: u32 },
     Done { exit_code: i32, stdout: String, stderr: String },
 }
 

@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
+pub mod build_kill;
 pub mod build_start;
 pub mod build_status;
 pub mod create_project;
@@ -242,6 +243,20 @@ pub fn list() -> Value {
                 }
             },
             {
+                "name": "build_kill",
+                "description": "Send SIGTERM to a running build job. The process gets a chance to clean up; poll build_status afterwards for the final (non-zero) exit result. Returns immediately if the build has already finished.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "string",
+                            "description": "The job_id returned by build_start"
+                        }
+                    },
+                    "required": ["job_id"]
+                }
+            },
+            {
                 "name": "build_status",
                 "description": "Poll the result of a background build started with build_start. Returns 'still running' while the build is in progress. Returns stdout/stderr and exit code when done (the result is consumed on first read). Returns 404 for unknown job_id.",
                 "inputSchema": {
@@ -282,6 +297,7 @@ pub async fn call(state: Arc<Mutex<AppState>>, params: &Value) -> ToolResult {
         "tree" => tree::run(state, &args).await,
         "put" => put::run(state, &args).await,
         "get_project_info" => get_project_info::run(state).await,
+        "build_kill" => build_kill::run(state, &args).await,
         "build_start" => build_start::run(state).await,
         "build_status" => build_status::run(state, &args).await,
         "git_status" => git_status::run(state).await,

@@ -1,3 +1,4 @@
+use std::process::Stdio;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -18,7 +19,7 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
             }
         };
 
-        let already_running = st.jobs.values().any(|j| matches!(j, BuildJob::Running));
+        let already_running = st.jobs.values().any(|j| matches!(j, BuildJob::Running { .. }));
         if already_running {
             return Ok(text_err(
                 "409: a build is already running — poll with build_status.",
@@ -33,23 +34,27 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
         return Ok(text_err("404: build.sh not found in project root."));
     }
 
+    let child = tokio::process::Command::new(SHELL_BIN)
+        .arg(&script)
+        .current_dir(&project_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| (-32603i32, format!("Failed to spawn build.sh: {e}")))?;
+
+    let pid = child.id().unwrap_or(0);
     let job_id = Uuid::new_v4().to_string();
 
     {
         let mut st = state.lock().await;
-        st.jobs.insert(job_id.clone(), BuildJob::Running);
+        st.jobs.insert(job_id.clone(), BuildJob::Running { pid });
     }
 
     let state_bg = state.clone();
     let job_id_bg = job_id.clone();
     tokio::spawn(async move {
-        let result = tokio::process::Command::new(SHELL_BIN)
-            .arg(&script)
-            .current_dir(&project_dir)
-            .output()
-            .await;
-
-        let job = match result {
+        let job = match child.wait_with_output().await {
             Ok(out) => BuildJob::Done {
                 exit_code: out.status.code().unwrap_or(-1),
                 stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -58,7 +63,7 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
             Err(e) => BuildJob::Done {
                 exit_code: -1,
                 stdout: String::new(),
-                stderr: format!("Failed to spawn build.sh: {e}"),
+                stderr: format!("Failed to wait for build.sh: {e}"),
             },
         };
 
