@@ -12,31 +12,26 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         .ok_or_else(|| (-32602i32, "Missing required argument: job_id".to_string()))?
         .to_string();
 
-    let st = state.lock().await;
+    let mut st = state.lock().await;
 
-    let pid = match st.jobs.get(&job_id) {
-        None => return Ok(text_err(format!("404: unknown job_id '{job_id}'."))),
+    match st.jobs.get_mut(&job_id) {
+        None => Ok(text_err(format!("404: unknown job_id '{job_id}'."))),
         Some(BuildJob::Done { .. }) => {
-            return Ok(text_ok("Build has already finished — nothing to kill."));
+            Ok(text_ok("Build has already finished — nothing to kill."))
         }
-        Some(BuildJob::Running { pid }) => *pid,
-    };
-
-    // See KILLING NOTE in build_start.rs about the pid 0 case. We guard against it here, and return an error instead of trying to kill.
-    if pid == 0 {
-        return Ok(text_err("Cannot kill: process PID is unavailable."));
+        Some(BuildJob::Running { kill_tx }) => match kill_tx.take() {
+            Some(tx) => {
+                // Receiver lives inside the job's background task; the only way
+                // send() can fail is if that task has already dropped it, which
+                // means the process is already exiting.
+                let _ = tx.send(());
+                Ok(text_ok(
+                    "SIGTERM requested. Poll build_status for the final result.",
+                ))
+            }
+            None => Ok(text_ok(
+                "Kill already requested — still waiting for the process to exit.",
+            )),
+        },
     }
-
-    // SIGTERM — gives the shell script a chance to clean up.
-    let rc = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
-    if rc != 0 {
-        let errno = std::io::Error::last_os_error();
-        return Ok(text_err(format!(
-            "Failed to send SIGTERM to PID {pid}: {errno}"
-        )));
-    }
-
-    Ok(text_ok(format!(
-        "SIGTERM sent to PID {pid}. Poll build_status for the final result."
-    )))
 }

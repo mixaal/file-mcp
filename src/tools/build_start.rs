@@ -1,6 +1,7 @@
 use std::process::Stdio;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::io::AsyncReadExt;
+use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 use crate::constants::SHELL_BIN;
@@ -41,7 +42,7 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
     // DO NOT add any features that would allow an attacker to write files into the project directory or otherwise modify the build.sh script,
     // without proper authentication and authorization in place. If you need to add such features, add them in a way that does not run the risk
     // of unauthorized code execution (e.g. by having a separate authenticated endpoint that can only write to a safe location, and having build.sh read from there).
-    let child = tokio::process::Command::new(SHELL_BIN)
+    let mut child = tokio::process::Command::new(SHELL_BIN)
         .arg(&script)
         .current_dir(&project_dir)
         .stdin(Stdio::null())
@@ -50,28 +51,67 @@ pub async fn run(state: Arc<Mutex<AppState>>) -> ToolResult {
         .spawn()
         .map_err(|e| (-32603i32, format!("Failed to spawn build.sh: {e}")))?;
 
-    // KILLING NOTE: Careful: if the pid is 0 in kill must be guard, not to kill -SIGTERM 0 which means "kill all processes in the current process group"
-    let pid = child.id().unwrap_or(0);
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
     let job_id = Uuid::new_v4().to_string();
 
     {
         let mut st = state.lock().await;
-        st.jobs.insert(job_id.clone(), BuildJob::Running { pid });
+        st.jobs.insert(
+            job_id.clone(),
+            BuildJob::Running { kill_tx: Some(kill_tx) },
+        );
     }
 
     let state_bg = state.clone();
     let job_id_bg = job_id.clone();
     tokio::spawn(async move {
-        let job = match child.wait_with_output().await {
-            Ok(out) => BuildJob::Done {
-                exit_code: out.status.code().unwrap_or(-1),
-                stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        // Drain the pipes concurrently so a chatty build can't block on a full pipe buffer.
+        let mut stdout_pipe = child.stdout.take();
+        let mut stderr_pipe = child.stderr.take();
+
+        let stdout_task = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(ref mut s) = stdout_pipe {
+                let _ = s.read_to_end(&mut buf).await;
+            }
+            buf
+        });
+        let stderr_task = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(ref mut s) = stderr_pipe {
+                let _ = s.read_to_end(&mut buf).await;
+            }
+            buf
+        });
+
+        // Child stays owned here for the whole select, so child.id() remains
+        // valid (the kernel can't reuse the PID until we reap via wait()).
+        let wait_result = tokio::select! {
+            status = child.wait() => status,
+            _ = kill_rx => {
+                if let Some(pid) = child.id() {
+                    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+                }
+                child.wait().await
+            }
+        };
+
+        let stdout_bytes = stdout_task.await.unwrap_or_default();
+        let stderr_bytes = stderr_task.await.unwrap_or_default();
+
+        let job = match wait_result {
+            Ok(status) => BuildJob::Done {
+                exit_code: status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
+                stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
             },
             Err(e) => BuildJob::Done {
                 exit_code: -1,
-                stdout: String::new(),
-                stderr: format!("Failed to wait for build.sh: {e}"),
+                stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
+                stderr: format!(
+                    "Failed to wait for build.sh: {e}\n{}",
+                    String::from_utf8_lossy(&stderr_bytes)
+                ),
             },
         };
 

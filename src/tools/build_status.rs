@@ -17,9 +17,9 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     match st.jobs.remove(&job_id) {
         None => Ok(text_err(format!("404: unknown job_id '{job_id}'."))),
 
-        Some(BuildJob::Running { pid }) => {
+        Some(running @ BuildJob::Running { .. }) => {
             // Put it back — not done yet.
-            st.jobs.insert(job_id, BuildJob::Running { pid });
+            st.jobs.insert(job_id, running);
             Ok(text_ok("Build is still running..."))
         }
 

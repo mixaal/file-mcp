@@ -54,7 +54,9 @@ impl ProjectSize {
 /// Result of a background build job.
 #[derive(Debug)]
 pub enum BuildJob {
-    Running { pid: u32 },
+    /// `kill_tx` is consumed on the first build_kill call — `None` means a kill
+    /// signal has already been sent but the process hasn't exited yet.
+    Running { kill_tx: Option<tokio::sync::oneshot::Sender<()>> },
     Done { exit_code: i32, stdout: String, stderr: String },
 }
 
