@@ -7,11 +7,11 @@ SERVER_URL="http://localhost:${PORT}/mcp"
 
 # ── build ─────────────────────────────────────────────────────────────────────
 echo "==> Building file-mcp..."
-cargo build --manifest-path "${SCRIPT_DIR}/Cargo.toml"
+cargo build --release --manifest-path "${SCRIPT_DIR}/Cargo.toml"
 
 # ── start server ──────────────────────────────────────────────────────────────
 echo "==> Starting file-mcp on port ${PORT}..."
-"${SCRIPT_DIR}/target/debug/file-mcp" &
+"${SCRIPT_DIR}/target/release/file-mcp" &
 SERVER_PID=$!
 trap 'echo; echo "==> Stopping file-mcp (PID ${SERVER_PID})..."; kill "${SERVER_PID}" 2>/dev/null || true' EXIT INT TERM
 
