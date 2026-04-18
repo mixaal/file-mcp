@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +51,13 @@ impl ProjectSize {
     }
 }
 
+/// Result of a background build job.
+#[derive(Debug)]
+pub enum BuildJob {
+    Running,
+    Done { exit_code: i32, stdout: String, stderr: String },
+}
+
 #[derive(Debug)]
 pub struct AppState {
     /// Active project directory (None until create_project or use_project is called).
@@ -63,6 +71,8 @@ pub struct AppState {
     pub base_dir: PathBuf,
     /// Absolute path to git binary (from $GIT_CMD or default /usr/bin/git).
     pub git_cmd: PathBuf,
+    /// Background build jobs keyed by job_id.
+    pub jobs: HashMap<String, BuildJob>,
 }
 
 impl AppState {
@@ -93,6 +103,7 @@ impl AppState {
             project_name: None,
             base_dir,
             git_cmd,
+            jobs: HashMap::new(),
         }
     }
 
