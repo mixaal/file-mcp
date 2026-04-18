@@ -62,6 +62,16 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         )));
     }
 
+    // ── 400: '.meta/' holds the project's quota settings; blocking writes here
+    //         prevents a client from rewriting .meta/project.json to lift its
+    //         own max_files/max_depth/language limits, then calling use_project
+    //         to re-load them.
+    if is_excluded_path(path_str, &[".meta"]) {
+        return Ok(text_err(format!(
+            "400: '{path_str}' is inside '.meta/' which is reserved for project metadata."
+        )));
+    }
+
     // ── 400: filename character validation ────────────────────────────────────
     if let Err(reason) = validate_put_path(path_str) {
         return Ok(text_err(format!("400: invalid path — {reason}")));

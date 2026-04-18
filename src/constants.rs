@@ -28,3 +28,11 @@ pub const MAX_GET_FILE_SZ: u64 = 512 * 1024;
 
 /// Maximum size (bytes) of content accepted by `put`. Larger payloads are rejected.
 pub const MAX_PUT_FILE_SZ: usize = 512 * 1024;
+
+/// Hard ceiling on `max_files` loaded from `.meta/project.json`. Defends against
+/// a hand-edited meta file requesting absurd quotas. Well above the Large preset (1000).
+pub const MAX_FILES_HARD_CAP: usize = 5000;
+
+/// Hard ceiling on `max_depth` loaded from `.meta/project.json`. Comfortably above
+/// the Large / Java preset (7).
+pub const MAX_DEPTH_HARD_CAP: usize = 10;

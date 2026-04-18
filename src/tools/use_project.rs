@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::constants::{MAX_DEPTH_HARD_CAP, MAX_FILES_HARD_CAP};
 use crate::state::{AppState, ProjectSize};
 use crate::tools::{text_err, text_ok, ToolResult};
 use crate::util::validate_name;
@@ -43,9 +44,15 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let meta: Value = serde_json::from_str(&raw)
         .map_err(|e| (-32603i32, format!("Failed to parse project meta: {e}")))?;
 
+    // SECURITY NOTE: .meta/project.json is treated as user-owned configuration —
+    // the user has the right to hand-edit max_files / max_depth to raise quotas
+    // beyond what create_project chose. put/mkdir block writes into '.meta/' so
+    // that an MCP client cannot lift its own limits, but a local edit is fine.
+    // The values are clamped to MAX_FILES_HARD_CAP / MAX_DEPTH_HARD_CAP here so
+    // an accidental or malicious absurd number cannot disable the checks entirely.
     let language = meta["language"].as_str().unwrap_or("unknown").to_string();
-    let max_files = meta["max_files"].as_u64().unwrap_or(200) as usize;
-    let max_depth = meta["max_depth"].as_u64().unwrap_or(3) as usize;
+    let max_files = (meta["max_files"].as_u64().unwrap_or(200) as usize).min(MAX_FILES_HARD_CAP);
+    let max_depth = (meta["max_depth"].as_u64().unwrap_or(3) as usize).min(MAX_DEPTH_HARD_CAP);
     let size = ProjectSize::from_str(meta["size"].as_str().unwrap_or("medium"))
         .unwrap_or_default();
 

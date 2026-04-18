@@ -36,6 +36,13 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         )));
     }
 
+    // ── 400: '.meta/' is reserved for project metadata; see put.rs for rationale.
+    if is_excluded_path(path_str, &[".meta"]) {
+        return Ok(text_err(format!(
+            "400: '{path_str}' is inside '.meta/' which is reserved for project metadata."
+        )));
+    }
+
     // Reuse the same per-component character rules as put (._-a-zA-Z0-9).
     // validate_put_path already rejects absolute paths, '..' and bad chars.
     if let Err(reason) = validate_put_path(path_str) {
