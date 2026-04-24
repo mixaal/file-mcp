@@ -88,13 +88,23 @@ pub fn list() -> Value {
             },
             {
                 "name": "get",
-                "description": "Read a file (or list a directory) within the active project. Returns 404-equivalent if no project is active. Absolute paths and paths escaping the project root are rejected.",
+                "description": "Read a file (or list a directory) within the active project. For files, an optional 1-indexed [start_line, end_line] range returns only that slice — useful to avoid pulling large files in full. Returns 404-equivalent if no project is active. Absolute paths and paths escaping the project root are rejected.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
                             "description": "Relative path within the project directory (e.g. 'src/main.rs')"
+                        },
+                        "start_line": {
+                            "type": "integer",
+                            "description": "1-indexed first line to include (inclusive). Defaults to 1 when only end_line is supplied. File-only; rejected on directories.",
+                            "minimum": 1
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "description": "1-indexed last line to include (inclusive). Defaults to end-of-file when only start_line is supplied. File-only; rejected on directories.",
+                            "minimum": 1
                         }
                     },
                     "required": ["path"]
