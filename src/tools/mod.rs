@@ -19,6 +19,7 @@ pub mod ls;
 pub mod mkdir;
 pub mod put;
 pub mod pwd;
+pub mod str_replace;
 pub mod tree;
 pub mod use_project;
 
@@ -118,6 +119,36 @@ pub fn list() -> Value {
                         }
                     },
                     "required": ["path", "content", "message"]
+                }
+            },
+            {
+                "name": "str_replace",
+                "description": "Replace a substring within an existing file in the active project and commit the change with git. Unlike put, this edits in place without rewriting the whole file. Returns 404-equivalent if no project is active or the file does not exist.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path within the project directory (must exist and be a regular file)"
+                        },
+                        "old_str": {
+                            "type": "string",
+                            "description": "Exact substring to replace (non-empty). Matching is byte-exact — whitespace and newlines must match the file."
+                        },
+                        "new_str": {
+                            "type": "string",
+                            "description": "Replacement substring. An empty string deletes occurrences of old_str."
+                        },
+                        "message": {
+                            "type": "string",
+                            "description": "Git commit message. Only a-zA-Z0-9, hyphens, and spaces are kept; consecutive spaces are collapsed; result is truncated to 120 chars."
+                        },
+                        "occurrence": {
+                            "type": "integer",
+                            "description": "0 = require old_str to be unique (error otherwise); -1 = replace every occurrence (rename-style); 1..n = replace only the n-th occurrence (1-indexed)."
+                        }
+                    },
+                    "required": ["path", "old_str", "new_str", "message", "occurrence"]
                 }
             },
             {
@@ -300,6 +331,7 @@ pub async fn call(state: Arc<Mutex<AppState>>, params: &Value) -> ToolResult {
         "ls" => ls::run(state, &args).await,
         "tree" => tree::run(state, &args).await,
         "put" => put::run(state, &args).await,
+        "str_replace" => str_replace::run(state, &args).await,
         "get_project_info" => get_project_info::run(state).await,
         "build_kill" => build_kill::run(state, &args).await,
         "build_start" => build_start::run(state).await,
