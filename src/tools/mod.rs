@@ -14,6 +14,7 @@ pub mod git_log;
 pub mod git_status;
 pub mod godot;
 pub mod get;
+pub mod grep;
 pub mod get_project_info;
 pub mod ls;
 pub mod mkdir;
@@ -163,6 +164,38 @@ pub fn list() -> Value {
                         }
                     },
                     "required": ["path"]
+                }
+            },
+            {
+                "name": "grep",
+                "description": "Search for an extended-regex (ERE) pattern within the active project. If 'path' is a file, only that file is searched; if it is a directory (or omitted, defaulting to the project root), the search is recursive and skips .git, .meta, and the language's build-artifact directories. Output filenames are returned relative to the project root.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path within the project directory. File or directory. Defaults to the project root '.'"
+                        },
+                        "regex": {
+                            "type": "string",
+                            "description": "Extended regular expression (grep -E) to match. Non-empty."
+                        },
+                        "lines_after": {
+                            "type": "integer",
+                            "description": "Context lines after each match (grep -A). Clamped to a hard cap.",
+                            "minimum": 0
+                        },
+                        "lines_before": {
+                            "type": "integer",
+                            "description": "Context lines before each match (grep -B). Clamped to a hard cap.",
+                            "minimum": 0
+                        },
+                        "output_line_numbers": {
+                            "type": "boolean",
+                            "description": "Prefix each output line with its 1-based line number (grep -n). Default false."
+                        }
+                    },
+                    "required": ["regex"]
                 }
             },
             {
@@ -327,6 +360,7 @@ pub async fn call(state: Arc<Mutex<AppState>>, params: &Value) -> ToolResult {
         "pwd" => pwd::run(state).await,
         "use_project" => use_project::run(state, &args).await,
         "get" => get::run(state, &args).await,
+        "grep" => grep::run(state, &args).await,
         "mkdir" => mkdir::run(state, &args).await,
         "ls" => ls::run(state, &args).await,
         "tree" => tree::run(state, &args).await,

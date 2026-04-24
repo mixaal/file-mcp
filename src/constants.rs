@@ -16,6 +16,21 @@ pub const SHELL_BIN: &str = "/bin/bash";
 /// Absolute path to the git binary used for all git sub-commands.
 pub const GIT_BIN: &str = "/usr/bin/git";
 
+/// Absolute path to the grep binary used by the `grep` tool.
+pub const GREP_BIN: &str = "/usr/bin/grep";
+
+/// Maximum byte-length of a regex pattern accepted by `grep`. Guards against
+/// pathological patterns that could slow matching or bloat argv.
+pub const GREP_PATTERN_MAX_LEN: usize = 1000;
+
+/// Hard cap on the `-A` / `-B` context line arguments to `grep`. Keeps output
+/// bounded even if a pattern matches every line.
+pub const GREP_MAX_CONTEXT: u64 = 50;
+
+/// Maximum size (bytes) of stdout returned by `grep`. Larger output is
+/// truncated with a sentinel appended.
+pub const MAX_GREP_OUTPUT_BYTES: usize = 1024 * 1024;
+
 /// Absolute path to the cargo binary used for Rust project scaffolding.
 /// Resolved from $HOME at build time to pick up the rustup default location.
 pub const CARGO_BIN: &str = concat!(env!("HOME"), "/.cargo/bin/cargo");
