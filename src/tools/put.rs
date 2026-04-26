@@ -32,10 +32,14 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
 
     let excluded = excluded_dirs_for(&language);
 
-    let path_str = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| (-32602i32, "Missing required argument: path".to_string()))?;
+    let path_str = match args.get("path").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(text_err(
+                "400: missing path param relative to project (required)",
+            ))
+        }
+    };
 
     let content = args
         .get("content")

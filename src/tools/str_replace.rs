@@ -31,7 +31,7 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         Some(s) => s,
         None => {
             return Ok(text_err(
-                "400: missing required argument 'path' (string, relative path within the active project).",
+                "400: missing path param relative to project (required)",
             ))
         }
     };
