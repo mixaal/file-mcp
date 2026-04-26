@@ -27,33 +27,62 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
 
     let excluded = excluded_dirs_for(&language);
 
-    let path_str = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| (-32602i32, "Missing required argument: path".to_string()))?;
+    let path_str = match args.get("path").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(text_err(
+                "400: missing required argument 'path' (string, relative path within the active project).",
+            ))
+        }
+    };
 
-    let old_str = args
-        .get("old_str")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| (-32602i32, "Missing required argument: old_str".to_string()))?;
+    let old_str = match args.get("old_str").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(text_err(
+                "400: missing required argument 'old_str' (string). The exact substring to replace — \
+                 matching is BYTE-BY-BYTE, including whitespace, tabs vs spaces, and newlines.",
+            ))
+        }
+    };
 
     // new_str may be "" (meaning: delete old_str).
-    let new_str = args
-        .get("new_str")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| (-32602i32, "Missing required argument: new_str".to_string()))?;
+    let new_str = match args.get("new_str").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(text_err(
+                "400: missing required argument 'new_str' (string). Use \"\" to delete old_str.",
+            ))
+        }
+    };
 
-    let message_raw = args
-        .get("message")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| (-32602i32, "Missing required argument: message".to_string()))?;
+    let message_raw = match args.get("message").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(text_err(
+                "400: missing required argument 'message' (string, git commit message).",
+            ))
+        }
+    };
 
     // Accept both the correct spelling and the common misspelling.
-    let occurrence = args
-        .get("occurrence")
-        .or_else(|| args.get("occurence"))
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| (-32602i32, "Missing required argument: occurrence".to_string()))?;
+    let occurrence_val = args.get("occurrence").or_else(|| args.get("occurence"));
+    let occurrence = match occurrence_val.and_then(|v| v.as_i64()) {
+        Some(n) => n,
+        None => {
+            let detail = match occurrence_val {
+                None => "argument is missing",
+                Some(v) if v.is_string() => "argument must be an integer, not a string",
+                Some(_) => "argument must be an integer",
+            };
+            return Ok(text_err(format!(
+                "400: invalid 'occurrence' — {detail}. Choose one: \
+                 0 = require old_str to be unique (error if it appears more than once), \
+                 -1 = replace every occurrence, \
+                 n>=1 = replace only the n-th occurrence (1-indexed)."
+            )));
+        }
+    };
 
     if old_str.is_empty() {
         return Ok(text_err("400: old_str must not be empty."));
@@ -143,8 +172,11 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
     let count = matches.len();
 
     if count == 0 {
+        let hint = diagnose_no_match(&original, old_str);
         return Ok(text_err(format!(
-            "404: old_str not found in '{path_str}' (0 occurrences)."
+            "404: old_str not found in '{path_str}' (0 occurrences). \
+             Matching is BYTE-BY-BYTE — whitespace, tabs vs spaces, and line endings must match exactly.{hint} \
+             Re-fetch the file with `get` and copy the bytes verbatim."
         )));
     }
 
@@ -228,5 +260,110 @@ pub async fn run(state: Arc<Mutex<AppState>>, args: &Value) -> ToolResult {
         Err(e) => Ok(text_err(format!(
             "File '{path_str}' updated but git commit failed: {e}"
         ))),
+    }
+}
+
+/// When old_str doesn't match, try a few common whitespace/line-ending
+/// substitutions and report which one would have matched. Returned string
+/// is either empty or starts with " Hint: ".
+fn diagnose_no_match(haystack: &str, needle: &str) -> String {
+    // 1. Tabs in needle but file uses spaces.
+    if needle.contains('\t') {
+        for width in [8usize, 4, 2] {
+            let candidate = needle.replace('\t', &" ".repeat(width));
+            if haystack.contains(&candidate) {
+                return format!(
+                    " Hint: your old_str uses TABS but the file uses {width} SPACES at the matching location."
+                );
+            }
+        }
+    }
+
+    // 2. Spaces in needle but file uses tabs. Try collapsing runs of N spaces
+    //    into a tab (only meaningful when the needle has multi-space runs).
+    for width in [8usize, 4, 2] {
+        let pat = " ".repeat(width);
+        if !needle.contains(&pat) {
+            continue;
+        }
+        let candidate = needle.replace(&pat, "\t");
+        if candidate != needle && haystack.contains(&candidate) {
+            return format!(
+                " Hint: your old_str uses {width} SPACES but the file uses TABS at the matching location."
+            );
+        }
+    }
+
+    // 3. Line-ending mismatch.
+    if needle.contains("\r\n") {
+        let candidate = needle.replace("\r\n", "\n");
+        if haystack.contains(&candidate) {
+            return " Hint: your old_str uses CRLF line endings but the file uses LF.".to_string();
+        }
+    } else if needle.contains('\n') && haystack.contains("\r\n") {
+        let candidate = needle.replace('\n', "\r\n");
+        if haystack.contains(&candidate) {
+            return " Hint: your old_str uses LF line endings but the file uses CRLF.".to_string();
+        }
+    }
+
+    // 4. Trailing whitespace on lines differs.
+    let trim_trailing = |s: &str| -> String {
+        s.split('\n')
+            .map(|l| l.trim_end_matches([' ', '\t']))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let needle_trim = trim_trailing(needle);
+    if needle_trim != needle {
+        let hay_trim = trim_trailing(haystack);
+        if hay_trim.contains(&needle_trim) {
+            return " Hint: trailing whitespace on one or more lines differs between old_str and the file."
+                .to_string();
+        }
+    } else {
+        let hay_trim = trim_trailing(haystack);
+        if hay_trim != haystack && hay_trim.contains(needle) {
+            return " Hint: the file has trailing whitespace on one or more lines that your old_str does not.".to_string();
+        }
+    }
+
+    String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::diagnose_no_match;
+
+    #[test]
+    fn detects_tab_in_needle_spaces_in_file() {
+        let file = "    let x = 1;\n";
+        let needle = "\tlet x = 1;\n";
+        let hint = diagnose_no_match(file, needle);
+        assert!(hint.contains("TABS"), "got: {hint}");
+        assert!(hint.contains("SPACES"), "got: {hint}");
+    }
+
+    #[test]
+    fn detects_spaces_in_needle_tabs_in_file() {
+        let file = "\tlet x = 1;\n";
+        let needle = "    let x = 1;\n";
+        let hint = diagnose_no_match(file, needle);
+        assert!(hint.contains("SPACES"), "got: {hint}");
+        assert!(hint.contains("TABS"), "got: {hint}");
+    }
+
+    #[test]
+    fn detects_crlf_vs_lf() {
+        let file = "a\nb\nc\n";
+        let needle = "a\r\nb\r\n";
+        let hint = diagnose_no_match(file, needle);
+        assert!(hint.contains("CRLF"), "got: {hint}");
+    }
+
+    #[test]
+    fn empty_when_no_obvious_cause() {
+        let hint = diagnose_no_match("hello world", "completely unrelated");
+        assert!(hint.is_empty(), "got: {hint}");
     }
 }
