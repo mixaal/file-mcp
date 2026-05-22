@@ -152,8 +152,14 @@ pub fn is_excluded_path(path: &str, excluded: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
+/// Directories never counted toward the project file limit, regardless of
+/// language. `.git` alone holds hundreds of objects/hooks/refs that would
+/// otherwise dwarf the real source tree.
+pub const ALWAYS_EXCLUDED_DIRS: &[&str] = &[".git"];
+
 /// Recursively count regular files under `dir`, skipping any top-level
 /// subdirectory whose name appears in `excluded` (synchronous — call via spawn_blocking).
+/// `.git` is always skipped at every level via [`ALWAYS_EXCLUDED_DIRS`].
 pub fn count_files_sync(dir: &Path, excluded: &[&str]) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
     entries.filter_map(|e| e.ok()).fold(0, |acc, entry| {
@@ -163,10 +169,14 @@ pub fn count_files_sync(dir: &Path, excluded: &[&str]) -> usize {
         } else if p.is_dir() {
             let skip = p
                 .file_name()
-                .map(|n| excluded.iter().any(|e| *e == n.to_string_lossy().as_ref()))
+                .map(|n| {
+                    let name = n.to_string_lossy();
+                    ALWAYS_EXCLUDED_DIRS.iter().any(|e| *e == name.as_ref())
+                        || excluded.iter().any(|e| *e == name.as_ref())
+                })
                 .unwrap_or(false);
-            // Excluded top-level dirs are not counted, but we still recurse into
-            // non-excluded subdirs using an empty excluded list (only top-level matters).
+            // Language-specific excluded dirs only apply at the top level, but
+            // ALWAYS_EXCLUDED_DIRS (e.g. `.git`) is reapplied at every depth.
             if skip { acc } else { acc + count_files_sync(&p, &[]) }
         } else {
             acc
